@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BOSS 프로젝트</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .status {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+        }
+
+        .status-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .status-label {
+            font-weight: bold;
+            color: #555;
+        }
+
+        .status-value {
+            color: #667eea;
+        }
+
+        .status-value.connected {
+            color: #10b981;
+        }
+
+        .status-value.disconnected {
+            color: #ef4444;
+        }
+
+        .features {
+            margin-top: 30px;
+        }
+
+        .features h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+
+        .feature-list {
+            list-style: none;
+        }
+
+        .feature-list li {
+            padding: 10px;
+            margin-bottom: 8px;
+            background: #f9fafb;
+            border-radius: 5px;
+            color: #555;
+        }
+
+        .feature-list li::before {
+            content: "✓ ";
+            color: #10b981;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+
+        .image-upload {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f9fafb;
+            border-radius: 10px;
+            border: 2px dashed #667eea;
+        }
+
+        .image-upload h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+
+        #imagePreview {
+            max-width: 100%;
+            margin-top: 15px;
+            border-radius: 10px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 BOSS 프로젝트</h1>
+        <p class="subtitle">TypeScript + Spring Boot 풀스택 애플리케이션</p>
+
+        <div class="status">
+            <div class="status-item">
+                <span class="status-label">프론트엔드 서버:</span>
+                <span class="status-value connected">연결됨</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">백엔드 서버:</span>
+                <span class="status-value" id="backendStatus">확인 중...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">WebSocket:</span>
+                <span class="status-value disconnected" id="wsStatus">연결 안됨</span>
+            </div>
+        </div>
+
+        <div class="features">
+            <h2>주요 기능</h2>
+            <ul class="feature-list">
+                <li>WebSocket 실시간 통신</li>
+                <li>이미지 인식 (TensorFlow.js)</li>
+                <li>RESTful API 연동</li>
+                <li>모던 UI/UX</li>
+            </ul>
+        </div>
+
+        <div class="image-upload">
+            <h3>📸 이미지 업로드 및 인식</h3>
+            <input type="file" id="imageInput" accept="image/*">
+            <img id="imagePreview" alt="이미지 미리보기">
+            <p id="imageResult" style="margin-top: 10px; color: #666;"></p>
+        </div>
+    </div>
+
+    <script>
+        // 서버에서 주입된 백엔드 URL
+        window.BACKEND_URL = '__BACKEND_URL__';
+    </script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+    <script src="/app.js"></script>
+</body>
+</html>
+
