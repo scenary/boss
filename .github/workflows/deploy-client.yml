@@ -38,6 +38,8 @@ jobs:
       - name: Build client
         working-directory: ./CLIENT
         env:
+          # 프로덕션 빌드를 위해 NODE_ENV 설정
+          NODE_ENV: production
           # 빌드 시점에 백엔드 URL 설정
           # GitHub Secrets에 VITE_BACKEND_URL을 설정하세요
           VITE_BACKEND_URL: ${{ secrets.VITE_BACKEND_URL || 'http://localhost:8080' }}
