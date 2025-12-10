@@ -5,11 +5,14 @@ FROM gradle:8.9-jdk21 AS builder
 
 WORKDIR /home/gradle/project
 
-# SERVER 폴더의 모든 파일 복사
+# SERVER 폴더의 모든 파일 복사 (settings.gradle, build.gradle 등 포함)
 COPY SERVER/ .
 
-# Gradle Toolchain이 JDK 21을 사용하도록 보장하며 빌드
-RUN gradle build -x test --no-daemon
+# Gradle Wrapper 권한 설정 (Linux용)
+RUN chmod +x gradlew || true
+
+# Gradle 빌드 (settings.gradle이 루트에 있어야 함)
+RUN ./gradlew build -x test --no-daemon || gradle build -x test --no-daemon
 
 # 실행 단계: JDK 21 JRE 사용 (경량화된 Alpine 이미지)
 FROM eclipse-temurin:21-jre-alpine
