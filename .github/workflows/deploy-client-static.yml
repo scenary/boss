@@ -1,0 +1,85 @@
+name: Deploy Client
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'CLIENT/**'
+      - '.github/workflows/deploy-client.yml'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'yarn'
+          cache-dependency-path: CLIENT/yarn.lock
+
+      - name: Install dependencies
+        working-directory: ./CLIENT
+        run: yarn install --frozen-lockfile
+
+      - name: Build client
+        working-directory: ./CLIENT
+        env:
+          # 빌드 시점에 백엔드 URL 설정 (환경 변수로 주입)
+          VITE_BACKEND_URL: ${{ secrets.VITE_BACKEND_URL || 'http://localhost:8080' }}
+        run: yarn build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-dist
+          path: CLIENT/dist
+          retention-days: 7
+
+  deploy-to-server:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: client-dist
+          path: ./dist
+
+      - name: Deploy to server via SSH
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          source: "dist/*"
+          target: ${{ secrets.DEPLOY_CLIENT_PATH || '/var/www/boss' }}
+          strip_components: 1
+
+      - name: Set permissions
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script: |
+            sudo chown -R www-data:www-data ${{ secrets.DEPLOY_CLIENT_PATH || '/var/www/boss' }}
+            sudo chmod -R 755 ${{ secrets.DEPLOY_CLIENT_PATH || '/var/www/boss' }}
+

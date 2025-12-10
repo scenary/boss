@@ -1,0 +1,57 @@
+name: Deploy Client
+
+on:
+  push:
+    branches:
+      - deploy
+    paths:
+      - 'CLIENT/**'
+      - '.github/workflows/deploy-client.yml'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'yarn'
+          cache-dependency-path: CLIENT/yarn.lock
+
+      - name: Install dependencies
+        working-directory: ./CLIENT
+        run: yarn install --frozen-lockfile
+
+      - name: Build client
+        working-directory: ./CLIENT
+        env:
+          # 빌드 시점에 백엔드 URL 설정
+          # GitHub Secrets에 VITE_BACKEND_URL을 설정하세요
+          VITE_BACKEND_URL: ${{ secrets.VITE_BACKEND_URL || 'http://localhost:8080' }}
+        run: yarn build
+
+      # GitHub Pages에 배포
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: CLIENT/dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
