@@ -18,8 +18,8 @@ node_modules/
 .gradle/
 gradle-wrapper.jar
 
-# Application Properties (민감한 정보 포함)
-SERVER/app/src/main/resources/application.properties
+# Application Properties는 Git에 포함 (민감한 정보는 환경 변수로 관리)
+# SERVER/app/src/main/resources/application.properties
 
 # Logs
 *.log
