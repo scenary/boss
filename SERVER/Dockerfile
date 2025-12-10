@@ -6,17 +6,25 @@ FROM gradle:8.9-jdk21 AS builder
 
 WORKDIR /home/gradle/project
 
-# 프로젝트 파일 복사
-COPY . .
-
 # Gradle Wrapper 권한 설정
 RUN chmod +x gradlew || true
+
+# Gradle 설정 파일 먼저 복사 (의존성 캐싱을 위해)
+COPY settings.gradle gradle.properties ./
+COPY app/build.gradle ./app/
+COPY gradlew ./
+COPY gradle ./gradle
+
+# 의존성 다운로드만 먼저 실행 (소스 코드 변경 시 재다운로드 방지)
+RUN ./gradlew dependencies --no-daemon || gradle dependencies --no-daemon || true
+
+# 소스 코드 복사 (의존성은 이미 캐시됨)
+COPY . .
 
 # Gradle Toolchain이 JDK 21을 사용하도록 보장하며 빌드
 # build.gradle의 toolchain 설정이 JDK 21을 사용하도록 되어 있음
 # Gradle Wrapper 사용 (로컬 Gradle 버전과 일치)
-# --stacktrace 옵션으로 더 자세한 에러 확인
-RUN ./gradlew build -x test --no-daemon --stacktrace || gradle build -x test --no-daemon --stacktrace
+RUN ./gradlew build -x test --no-daemon || gradle build -x test --no-daemon
 
 # 빌드된 JAR 파일 확인 (디버깅용)
 RUN ls -la /home/gradle/project/app/build/libs/ || echo "libs directory not found"
