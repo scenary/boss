@@ -27,9 +27,8 @@ FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
 # 빌드된 Spring Boot JAR 파일 복사 (bootJar 태스크로 생성된 실행 가능한 JAR)
-# Spring Boot는 bootJar 태스크로 실행 가능한 JAR를 생성합니다
-# 파일 이름은 보통 {project-name}-{version}-boot.jar 형식입니다
-COPY --from=builder /home/gradle/project/app/build/libs/*-boot.jar app.jar
+# bootJar는 app.jar로 생성됩니다 (app-plain.jar는 일반 JAR, 무시)
+COPY --from=builder /home/gradle/project/app/build/libs/app.jar app.jar
 
 # Java 버전 확인용 (선택사항)
 RUN java -version
