@@ -23,8 +23,9 @@ FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
-# 빌드된 JAR 파일 복사
-COPY --from=builder /home/gradle/project/app/build/libs/app-*.jar app.jar
+# 빌드된 Spring Boot JAR 파일 복사 (bootJar 태스크로 생성된 실행 가능한 JAR)
+# app-*-boot.jar 형식의 파일을 찾아서 복사
+COPY --from=builder /home/gradle/project/app/build/libs/app-*-boot.jar app.jar
 
 # Java 버전 확인용 (선택사항)
 RUN java -version
