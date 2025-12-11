@@ -36,7 +36,6 @@ const RaidRoomPage: React.FC<RaidRoomPageProps> = ({ user }) => {
         const userId = typeof user.id === 'string' ? parseInt(user.id, 10) : user.id;
         if (userId) {
           websocketService.send('/app/raid-room/disconnect', {});
-          console.log('레이드 방 접속 해제 알림 전송:', { roomId, userId });
         }
       }
       
@@ -60,8 +59,6 @@ const RaidRoomPage: React.FC<RaidRoomPageProps> = ({ user }) => {
         setLoading(true);
       }
       const data = await getRaidRoom(parseInt(roomId), forceRefresh);
-      console.log('레이드 방 데이터 로드:', data);
-      console.log('접속 사용자 목록:', data?.connectedUsers);
       
       // 채널 메모 데이터 정규화 (빈 문자열을 null로 변환하지 않음)
       if (data && data.channels) {
@@ -119,13 +116,6 @@ const RaidRoomPage: React.FC<RaidRoomPageProps> = ({ user }) => {
           roomId: parseInt(roomId),
           userId: userId
         });
-        console.log('레이드 방 접속 알림 전송:', { roomId, userId });
-      } else {
-        console.warn('접속 알림 전송 실패:', { 
-          userId, 
-          roomId, 
-          isConnected: websocketService.isConnected() 
-        });
       }
     };
 
@@ -142,7 +132,6 @@ const RaidRoomPage: React.FC<RaidRoomPageProps> = ({ user }) => {
           sendConnectMessage();
         } else if (retryCount >= maxRetries) {
           clearInterval(checkConnection);
-          console.error('WebSocket 연결 실패: 접속 알림을 보낼 수 없습니다.');
         }
         retryCount++;
       }, 200);
@@ -158,37 +147,21 @@ const RaidRoomPage: React.FC<RaidRoomPageProps> = ({ user }) => {
 
     // 레이드 방 업데이트 구독
     const unsubscribe = websocketService.subscribe(`/topic/raid-room/${roomId}`, (data: RaidRoomData | any) => {
-      console.log('레이드 방 업데이트 수신:', data);
-      
       // 증분 업데이트인 경우 (빠른 반응을 위한 알림)
       if (data.type === 'incremental_update') {
-        console.log('증분 업데이트 수신, 전체 데이터 대기 중...');
         // 증분 업데이트는 UI를 즉시 업데이트하지 않고, 전체 데이터를 기다림
         // 클라이언트는 이미 낙관적 업데이트로 UI를 업데이트했으므로
         // 서버에서 전체 데이터가 올 때까지 기다림
         return;
       }
       
-      console.log('타임스탬프:', (data as any)._timestamp);
-      console.log('채널 수:', data.channels?.length);
-      console.log('참가자 수:', data.participants?.length);
-      // 이동중인 사용자 확인
-      data.channels?.forEach((ch: any) => {
-        const movingUsers = ch.users?.filter((u: any) => u.isMoving);
-        if (movingUsers && movingUsers.length > 0) {
-          console.log(`채널 ${ch.channelNumber} 이동중 사용자:`, movingUsers.map((u: any) => ({ userId: u.userId, username: u.username, displayName: u.displayName })));
-        }
-      });
-      
       // 웹소켓 메시지 수신 시 타임아웃 취소 및 채널 추가 플래그 해제
       if (websocketTimeoutRef.current) {
         clearTimeout(websocketTimeoutRef.current);
         websocketTimeoutRef.current = null;
-        console.log('웹소켓 메시지 수신, 타임아웃 취소');
       }
       if (isAddingChannelRef.current) {
         isAddingChannelRef.current = false;
-        console.log('채널 추가 완료 (웹소켓 메시지 수신)');
       }
       
       // 서버에서 받은 데이터로 상태 업데이트
@@ -218,7 +191,6 @@ const RaidRoomPage: React.FC<RaidRoomPageProps> = ({ user }) => {
         }
       }
       // connectedUsers도 함께 업데이트
-      console.log('WebSocket 메시지 - 접속 사용자 목록:', data.connectedUsers);
       
       // 현재 사용자의 참석 상태 확인
       if (data && data.participants && user && user.id) {
@@ -239,14 +211,12 @@ const RaidRoomPage: React.FC<RaidRoomPageProps> = ({ user }) => {
     });
 
     wsSubscriptionRef.current = unsubscribe;
-    console.log('WebSocket 구독 완료:', `/topic/raid-room/${roomId}`);
     
     // 접속 사용자 목록 구독
     if (wsUsersSubscriptionRef.current) {
       wsUsersSubscriptionRef.current();
     }
     const unsubscribeUsers = websocketService.subscribe(`/topic/raid-room/${roomId}/users`, (data: any) => {
-      console.log('접속 사용자 목록 업데이트:', data);
       if (data && data.users) {
         setRoomData((prevData) => {
           if (!prevData) return prevData;
@@ -263,7 +233,6 @@ const RaidRoomPage: React.FC<RaidRoomPageProps> = ({ user }) => {
   const handleAddChannel = async () => {
     // 중복 요청 방지
     if (isAddingChannelRef.current) {
-      console.log('채널 추가 중... 대기');
       return;
     }
 
@@ -300,18 +269,15 @@ const RaidRoomPage: React.FC<RaidRoomPageProps> = ({ user }) => {
     });
 
     try {
-      console.log('채널 생성 요청:', channelNumber);
       const result = await createChannel(parseInt(roomId), channelNum);
       
       if (result.success) {
-        console.log('채널 생성 성공, 웹소켓 메시지 대기 중...');
         // 웹소켓 메시지가 도착하면 서버 데이터로 덮어쓰기됨
         // 타임아웃 안전장치: 웹소켓이 실패하면 API로 폴백 (1초 후)
         if (websocketTimeoutRef.current) {
           clearTimeout(websocketTimeoutRef.current);
         }
         websocketTimeoutRef.current = setTimeout(() => {
-          console.warn('웹소켓 메시지 타임아웃, API로 폴백 새로고침');
           loadRoomInfo(true, true); // silent 모드
           websocketTimeoutRef.current = null;
           isAddingChannelRef.current = false;
@@ -510,10 +476,7 @@ const RaidRoomPage: React.FC<RaidRoomPageProps> = ({ user }) => {
       
       // 서버에 저장 (WebSocket으로 자동 업데이트됨)
       await toggleChannelSelection(parseInt(roomId), selectedChannelId, userId);
-      console.log('이동중 표시 성공, WebSocket 업데이트 대기 중...');
     } catch (err: any) {
-      console.error('이동중 표시 실패:', err);
-      console.error('에러 상세:', err.response?.data);
       alert(err.response?.data?.error || '이동중 표시에 실패했습니다.');
     }
   };
@@ -533,10 +496,7 @@ const RaidRoomPage: React.FC<RaidRoomPageProps> = ({ user }) => {
       
       // 현재 선택된 채널에서 이동중 해제 (WebSocket으로 자동 업데이트됨)
       await toggleChannelSelection(parseInt(roomId), selectedChannelId, userId);
-      console.log('이동중 해제 성공, WebSocket 업데이트 대기 중...');
     } catch (err: any) {
-      console.error('이동중 해제 실패:', err);
-      console.error('에러 상세:', err.response?.data);
       alert(err.response?.data?.error || '이동중 해제에 실패했습니다.');
     }
   };

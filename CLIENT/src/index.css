@@ -131,13 +131,25 @@ body {
   cursor: not-allowed;
 }
 
+.discord-icon {
+  margin-right: 8px;
+  width: 20px;
+  height: 20px;
+  vertical-align: middle;
+}
+
 .btn-discord {
   background-color: #5865f2;
   color: white;
 }
 
-.btn-discord:hover {
+.btn-discord:hover:not(:disabled) {
   background-color: #4752c4;
+}
+
+.btn-discord:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* 보스 목록 페이지 */

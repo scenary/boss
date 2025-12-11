@@ -61,7 +61,6 @@ const BossListPage: React.FC<BossListPageProps> = ({ user, onLogout }) => {
 
     // 보스 목록 업데이트 구독
     const unsubscribe = websocketService.subscribe('/topic/bosses/today', (data: any) => {
-      console.log('보스 목록 업데이트 수신:', data);
       // 서버에서 받은 데이터로 상태 업데이트
       if (data && data.bosses) {
         setBosses(data.bosses);
@@ -69,7 +68,6 @@ const BossListPage: React.FC<BossListPageProps> = ({ user, onLogout }) => {
     });
 
     wsSubscriptionRef.current = unsubscribe;
-    console.log('WebSocket 구독 완료: /topic/bosses/today');
   };
 
   const handleEnterRoom = (roomId: number) => {
