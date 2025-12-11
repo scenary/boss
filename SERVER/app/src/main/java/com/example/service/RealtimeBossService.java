@@ -154,8 +154,24 @@ public class RealtimeBossService {
                 update.put("connectedUsers", cachedData.get("connectedUsers"));
                 logger.debug("증분 업데이트 브로드캐스트 (캐시 사용): roomId={}", roomId);
             } else {
-                update.put("message", "업데이트가 발생했습니다. 전체 데이터를 기다리는 중...");
-                logger.debug("증분 업데이트 브로드캐스트 (캐시 없음): roomId={}", roomId);
+                // 캐시가 없으면 빠르게 최소한의 데이터만 조회 (전체 조회보다 빠름)
+                try {
+                    // 빠른 조회: getRaidRoom은 캐시를 확인하고, 캐시가 없으면 DB에서 조회
+                    // loadChannelsAndUsers=false로 빠르게 조회 (채널 유저는 제외)
+                    Map<String, Object> quickData = getRaidRoomService().getRaidRoom(roomId);
+                    if (quickData != null) {
+                        update.put("channels", quickData.get("channels"));
+                        update.put("participants", quickData.get("participants"));
+                        update.put("connectedUsers", quickData.get("connectedUsers"));
+                        logger.debug("증분 업데이트 브로드캐스트 (빠른 조회): roomId={}", roomId);
+                    } else {
+                        update.put("message", "업데이트가 발생했습니다. 전체 데이터를 기다리는 중...");
+                        logger.debug("증분 업데이트 브로드캐스트 (데이터 없음): roomId={}", roomId);
+                    }
+                } catch (Exception e) {
+                    update.put("message", "업데이트가 발생했습니다. 전체 데이터를 기다리는 중...");
+                    logger.debug("증분 업데이트 브로드캐스트 (조회 실패): roomId={}", roomId);
+                }
             }
             
             messagingTemplate.convertAndSend("/topic/raid-room/" + roomId, update);

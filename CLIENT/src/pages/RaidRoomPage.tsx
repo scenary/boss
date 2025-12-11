@@ -177,9 +177,20 @@ const RaidRoomPage: React.FC<RaidRoomPageProps> = ({ user }) => {
     const unsubscribe = websocketService.subscribe(`/topic/raid-room/${roomId}`, (data: RaidRoomData | any) => {
       // 증분 업데이트인 경우 (빠른 반응을 위한 알림)
       if (data.type === 'incremental_update') {
-        // 증분 업데이트는 UI를 즉시 업데이트하지 않고, 전체 데이터를 기다림
-        // 클라이언트는 이미 낙관적 업데이트로 UI를 업데이트했으므로
-        // 서버에서 전체 데이터가 올 때까지 기다림
+        // 증분 업데이트에 채널 데이터가 있으면 즉시 업데이트 (빠른 반응)
+        if (data.channels && Array.isArray(data.channels)) {
+          setRoomData((prevData) => {
+            if (!prevData) return prevData;
+            return {
+              ...prevData,
+              channels: data.channels,
+              participants: data.participants || prevData.participants,
+              connectedUsers: data.connectedUsers || prevData.connectedUsers
+            };
+          });
+          console.debug("증분 업데이트로 UI 즉시 업데이트:", roomId);
+        }
+        // 전체 데이터는 백그라운드에서 올 예정이므로 여기서는 반환
         return;
       }
       
