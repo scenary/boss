@@ -26,7 +26,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, isServerAlive = null }) 
   }, []);
 
   const handleSubmit = async (e: FormEvent) => {
-햣 ㅠ    e.preventDefault();
+    e.preventDefault();
     setError('');
     setLoading(true);
 
