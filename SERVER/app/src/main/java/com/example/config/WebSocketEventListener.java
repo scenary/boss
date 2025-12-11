@@ -61,7 +61,8 @@ public class WebSocketEventListener {
                         connectionService.onUserConnect(sessionId, userId, roomId);
                         logger.info("레이드 방 구독: sessionId={}, userId={}, roomId={}", sessionId, userId, roomId);
                     } else {
-                        logger.warn("사용자 ID를 찾을 수 없음: sessionId={}, roomId={}", sessionId, roomId);
+                        // 세션이 없거나 로그인하지 않은 사용자가 구독한 경우 (정상적인 경우일 수 있음)
+                        logger.debug("사용자 ID를 찾을 수 없음 (세션 없음 또는 미로그인): sessionId={}, roomId={}", sessionId, roomId);
                     }
                 } catch (NumberFormatException e) {
                     logger.warn("잘못된 roomId 형식: {}", roomIdStr);

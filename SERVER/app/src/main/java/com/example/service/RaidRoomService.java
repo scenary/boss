@@ -91,10 +91,21 @@ public class RaidRoomService {
             Optional<RaidRoom> roomOpt = null;
             if (loadChannelsAndUsers) {
                 try {
-                    // 채널과 채널 유저를 함께 로드하여 lazy loading 문제 방지
-                    roomOpt = raidRoomRepository.findByIdWithChannelsAndUsers(roomId);
+                    // 채널만 함께 로드 (MultipleBagFetchException 방지)
+                    roomOpt = raidRoomRepository.findByIdWithChannels(roomId);
                     if (roomOpt.isPresent()) {
-                        logger.debug("JOIN FETCH로 레이드 방 조회 성공: roomId={}", roomId);
+                        RaidRoom room = roomOpt.get();
+                        // 각 채널의 채널 유저를 별도로 조회하여 lazy loading 문제 방지
+                        try {
+                            for (Channel channel : room.getChannels()) {
+                                List<ChannelUser> channelUsers = channelUserRepository.findByChannelId(channel.getId());
+                                channel.getChannelUsers().clear();
+                                channel.getChannelUsers().addAll(channelUsers);
+                            }
+                            logger.debug("JOIN FETCH로 레이드 방 조회 성공: roomId={}, channels={}", roomId, room.getChannels().size());
+                        } catch (Exception e) {
+                            logger.warn("채널 유저 조회 실패: roomId={}", roomId, e);
+                        }
                     }
                 } catch (Exception e) {
                     logger.warn("JOIN FETCH 쿼리 실패, 폴백 시도: roomId={}, error={}", roomId, e.getMessage());
