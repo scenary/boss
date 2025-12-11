@@ -13,3 +13,15 @@ export const discordLogin = (): void => {
   
   window.location.href = discordAuthUrl;
 };
+
+// 서버 keep-alive를 위한 health check
+export const healthCheck = async (): Promise<boolean> => {
+  try {
+    await apiClient.get('/api/auth/health');
+    return true;
+  } catch (error) {
+    // 에러가 발생해도 조용히 처리 (서버가 sleep 상태일 수 있으므로)
+    console.debug('Health check failed:', error);
+    return false;
+  }
+};

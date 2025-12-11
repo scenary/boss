@@ -5,9 +5,10 @@ import { User } from '../types';
 
 interface LoginPageProps {
   onLogin: (user: User) => void;
+  isServerAlive?: boolean | null; // null: 초기 상태, true: 살아있음, false: sleep
 }
 
-const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
+const LoginPage: React.FC<LoginPageProps> = ({ onLogin, isServerAlive = null }) => {
   const [nickname, setNickname] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,7 +26,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   }, []);
 
   const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+햣 ㅠ    e.preventDefault();
     setError('');
     setLoading(true);
 
@@ -55,7 +56,15 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
 
   return (
     <div className="login-container">
-      <h1>🐉 보스 레이드</h1>
+      <h1 className="login-title">
+        🐉 보스 레이드
+        {isServerAlive !== null && (
+          <span 
+            className={`server-status-indicator ${isServerAlive ? 'alive' : 'sleep'}`}
+            title={isServerAlive ? '서버가 살아있습니다' : '서버가 sleep 중입니다'}
+          />
+        )}
+      </h1>
       <p className="subtitle">로그인하여 레이드에 참가하세요</p>
 
       <form className="login-form" onSubmit={handleSubmit}>

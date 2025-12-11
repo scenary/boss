@@ -6,10 +6,12 @@ import RaidRoomPage from './pages/RaidRoomPage';
 import CompletedRoomsPage from './pages/CompletedRoomsPage';
 import { User } from './types';
 import { getBackendUrl } from './services/api';
+import { healthCheck } from './services/AuthService';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isServerAlive, setIsServerAlive] = useState<boolean | null>(null); // null: 초기 상태, true: 살아있음, false: sleep
 
   useEffect(() => {
     // Discord 로그인 성공 확인
@@ -53,6 +55,28 @@ function App() {
     setLoading(false);
   }, []);
 
+  // 서버 keep-alive: 앱이 실행 중일 때 10분마다 health check 요청
+  useEffect(() => {
+    // 서버 상태 체크 함수
+    const checkServerStatus = async () => {
+      const isAlive = await healthCheck();
+      setIsServerAlive(isAlive);
+    };
+
+    // 컴포넌트 마운트 시 즉시 한 번 호출
+    checkServerStatus();
+
+    // 10분(600,000ms)마다 health check 실행
+    const intervalId = setInterval(() => {
+      checkServerStatus();
+    }, 10 * 60 * 1000); // 10분
+
+    // 컴포넌트 언마운트 시 interval 정리
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, []);
+
   const handleSetUser = (newUser: User | null) => {
     setUser(newUser);
     if (newUser) {
@@ -78,7 +102,7 @@ function App() {
             user ? (
               <Navigate to="/" replace />
             ) : (
-              <LoginPage onLogin={handleSetUser} />
+              <LoginPage onLogin={handleSetUser} isServerAlive={isServerAlive} />
             )
           }
         />
