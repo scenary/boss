@@ -161,6 +161,20 @@ class WebSocketService {
   }
 
   /**
+   * 메시지 전송
+   */
+  send(destination: string, body: any): void {
+    if (this.client && this.client.connected) {
+      this.client.publish({
+        destination: destination,
+        body: JSON.stringify(body)
+      });
+    } else {
+      console.warn('WebSocket이 연결되지 않아 메시지를 보낼 수 없습니다:', destination);
+    }
+  }
+
+  /**
    * 연결 종료
    */
   disconnect(): void {

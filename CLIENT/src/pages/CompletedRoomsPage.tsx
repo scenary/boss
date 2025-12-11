@@ -42,7 +42,7 @@ const CompletedRoomsPage: React.FC<CompletedRoomsPageProps> = ({ user, onLogout 
   };
 
   const handleViewRoom = (roomId: number) => {
-    navigate(`/raid-room/${roomId}`);
+    navigate(`/raid-room/${roomId}`, { state: { fromCompleted: true } });
   };
 
   return (
@@ -51,45 +51,51 @@ const CompletedRoomsPage: React.FC<CompletedRoomsPageProps> = ({ user, onLogout 
         <button className="btn-back" onClick={() => navigate('/')}>
           ← 뒤로
         </button>
-        <h1>✓ 완료된 레이드</h1>
-        <div className="user-info">
-          <span>{user.displayName || user.username}</span>
+        <div className="header-actions">
+          <span className="user-name">{user.displayName || user.username}</span>
           <button className="btn-logout" onClick={onLogout}>
             로그아웃
           </button>
         </div>
       </div>
       <div className="content">
-        {loading ? (
-          <p>로딩 중...</p>
-        ) : error ? (
-          <p style={{ color: 'red' }}>{error}</p>
-        ) : rooms.length === 0 ? (
-          <p className="no-completed-rooms">완료된 레이드가 없습니다.</p>
-        ) : (
-          <div className="completed-rooms-list">
-            {rooms.map((room) => (
-              <div key={room.id} className="completed-room-card">
-                <div className="room-header">
-                  <h3>{room.bossName}</h3>
-                  <span className="completed-badge">✓ 완료됨</span>
-                </div>
-                <div className="room-details">
-                  <p>레이드 날짜: {room.raidDate}</p>
-                  {room.raidTime && <p>레이드 시간: {room.raidTime}</p>}
-                  <p>완료 시간: {new Date(room.completedAt).toLocaleString('ko-KR')}</p>
-                  <p>채널 수: {room.channelCount}개</p>
-                </div>
-                <button
-                  className="btn-view"
-                  onClick={() => handleViewRoom(room.id)}
-                >
-                  상세 보기 (읽기 전용)
-                </button>
-              </div>
-            ))}
+        <div className="channels-section">
+          <div className="channels-header">
+            <div className="channels-header-left">
+              <h2>✓ 완료된 레이드</h2>
+            </div>
           </div>
-        )}
+          {loading ? (
+            <p>로딩 중...</p>
+          ) : error ? (
+            <p style={{ color: 'red' }}>{error}</p>
+          ) : rooms.length === 0 ? (
+            <p className="no-completed-rooms">완료된 레이드가 없습니다.</p>
+          ) : (
+            <div className="completed-rooms-list">
+              {rooms.map((room) => (
+                <div key={room.id} className="completed-room-card">
+                  <div className="room-header">
+                    <h3>{room.bossName}</h3>
+                    <span className="completed-badge">✓ 완료됨</span>
+                  </div>
+                  <div className="room-details">
+                    <p>레이드 날짜: {room.raidDate}</p>
+                    {room.raidTime && <p>레이드 시간: {room.raidTime}</p>}
+                    <p>완료 시간: {new Date(room.completedAt).toLocaleString('ko-KR')}</p>
+                    <p>채널 수: {room.channelCount}개</p>
+                  </div>
+                  <button
+                    className="btn-view"
+                    onClick={() => handleViewRoom(room.id)}
+                  >
+                    상세 보기 (읽기 전용)
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

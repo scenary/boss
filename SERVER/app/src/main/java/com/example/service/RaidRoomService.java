@@ -2,15 +2,19 @@ package com.example.service;
 
 import com.example.entity.Channel;
 import com.example.entity.ChannelUser;
+import com.example.entity.RaidParticipation;
 import com.example.entity.RaidRoom;
 import com.example.entity.User;
 import com.example.repository.ChannelRepository;
 import com.example.repository.ChannelUserRepository;
+import com.example.repository.RaidParticipationRepository;
 import com.example.repository.RaidRoomRepository;
 import com.example.repository.UserRepository;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -27,6 +31,8 @@ import java.util.stream.Collectors;
 @Service
 public class RaidRoomService {
     
+    private static final Logger logger = LoggerFactory.getLogger(RaidRoomService.class);
+    
     @Autowired
     private RaidRoomRepository raidRoomRepository;
     
@@ -40,7 +46,16 @@ public class RaidRoomService {
     private UserRepository userRepository;
     
     @Autowired
+    private RaidParticipationRepository raidParticipationRepository;
+    
+    @Autowired
     private RealtimeBossService realtimeBossService;
+    
+    @Autowired
+    private com.example.service.WebSocketConnectionService webSocketConnectionService;
+    
+    @Autowired
+    private CacheManager cacheManager;
     
     @PersistenceContext
     private EntityManager entityManager;
@@ -52,7 +67,7 @@ public class RaidRoomService {
     @Transactional(readOnly = true)
     @Cacheable(value = "raidRoom", key = "#roomId", unless = "#result == null")
     public Map<String, Object> getRaidRoom(Long roomId) {
-        return getRaidRoomInternal(roomId);
+        return getRaidRoomInternal(roomId, false);
     }
     
     /**
@@ -64,22 +79,58 @@ public class RaidRoomService {
     public Map<String, Object> getRaidRoomWithoutCache(Long roomId) {
         // 영속성 컨텍스트를 clear하여 최신 데이터를 보장
         entityManager.clear();
-        return getRaidRoomInternal(roomId);
+        return getRaidRoomInternal(roomId, true);
     }
     
     /**
      * 레이드 방 상세 정보 조회 내부 로직 (공통)
+     * @param loadChannelsAndUsers true면 EntityGraph로 채널과 채널 유저를 함께 로드 (이동중 표시를 위해)
      */
-    private Map<String, Object> getRaidRoomInternal(Long roomId) {
+    private Map<String, Object> getRaidRoomInternal(Long roomId, boolean loadChannelsAndUsers) {
         try {
-            Optional<RaidRoom> roomOpt;
-            try {
+            Optional<RaidRoom> roomOpt = null;
+            if (loadChannelsAndUsers) {
+                try {
+                    // 채널과 채널 유저를 함께 로드하여 lazy loading 문제 방지
+                    roomOpt = raidRoomRepository.findByIdWithChannelsAndUsers(roomId);
+                    if (roomOpt.isPresent()) {
+                        logger.debug("JOIN FETCH로 레이드 방 조회 성공: roomId={}", roomId);
+                    }
+                } catch (Exception e) {
+                    logger.warn("JOIN FETCH 쿼리 실패, 폴백 시도: roomId={}, error={}", roomId, e.getMessage());
+                }
+                
+                // JOIN FETCH가 실패하거나 결과가 없으면 명시적으로 채널과 채널 유저를 조회
+                if (roomOpt == null || roomOpt.isEmpty()) {
+                    roomOpt = raidRoomRepository.findById(roomId);
+                    if (roomOpt.isPresent()) {
+                        RaidRoom room = roomOpt.get();
+                        // 명시적으로 채널과 채널 유저를 조회하여 lazy loading 문제 방지
+                        try {
+                            List<Channel> channels = channelRepository.findByRaidRoomId(roomId);
+                            room.getChannels().clear();
+                            room.getChannels().addAll(channels);
+                            
+                            // 각 채널의 채널 유저도 명시적으로 로드
+                            for (Channel channel : channels) {
+                                List<ChannelUser> channelUsers = channelUserRepository.findByChannelId(channel.getId());
+                                channel.getChannelUsers().clear();
+                                channel.getChannelUsers().addAll(channelUsers);
+                            }
+                            logger.debug("명시적 조회로 레이드 방 데이터 로드 성공: roomId={}, channels={}", roomId, channels.size());
+                        } catch (Exception e) {
+                            logger.error("채널 및 채널 유저 명시적 조회 실패: roomId={}", roomId, e);
+                            // 조회 실패해도 기본 데이터는 반환
+                        }
+                    }
+                }
+            } else {
+                // 일반 조회는 기본 findById 사용
                 roomOpt = raidRoomRepository.findById(roomId);
-            } catch (Exception e) {
-                return null;
             }
             
-            if (roomOpt.isEmpty()) {
+            if (roomOpt == null || roomOpt.isEmpty()) {
+                logger.warn("레이드 방을 찾을 수 없습니다: roomId={}", roomId);
                 return null;
             }
             
@@ -121,12 +172,18 @@ public class RaidRoomService {
                 response.put("completedAt", room.getCompletedAt().toString());
             }
             
-            // 채널 목록 (null 체크)
+            // 채널 목록 (null 체크 및 정렬)
             List<Map<String, Object>> channels = new java.util.ArrayList<>();
             if (room.getChannels() != null) {
                 try {
                     channels = room.getChannels().stream()
                         .filter(channel -> channel != null)
+                        .sorted((c1, c2) -> {
+                            // channelNumber로 정렬 (null 처리)
+                            Integer num1 = c1.getChannelNumber() != null ? c1.getChannelNumber() : 0;
+                            Integer num2 = c2.getChannelNumber() != null ? c2.getChannelNumber() : 0;
+                            return num1.compareTo(num2);
+                        })
                         .map((Channel channel) -> {
                             Map<String, Object> channelData = new HashMap<>();
                             channelData.put("id", channel.getId());
@@ -148,6 +205,9 @@ public class RaidRoomService {
                                             Map<String, Object> userData = new HashMap<>();
                                             userData.put("userId", cu.getUser().getId());
                                             userData.put("username", cu.getUser().getUsername() != null ? cu.getUser().getUsername() : "");
+                                            // displayName과 avatarUrl 추가
+                                            userData.put("displayName", cu.getUser().getDisplayName() != null ? cu.getUser().getDisplayName() : "");
+                                            userData.put("avatarUrl", cu.getUser().getAvatarUrl() != null ? cu.getUser().getAvatarUrl() : "");
                                             userData.put("guildName", cu.getGuildName() != null ? cu.getGuildName() : "");
                                             userData.put("memberCount", cu.getMemberCount() != null ? cu.getMemberCount() : 0);
                                             userData.put("isMoving", cu.getIsMoving() != null ? cu.getIsMoving() : false);
@@ -169,6 +229,15 @@ public class RaidRoomService {
             }
             
             response.put("channels", channels);
+            
+            // 현재 접속한 사용자 목록 (WebSocket 연결 추적)
+            try {
+                List<Map<String, Object>> connectedUsers = webSocketConnectionService.getConnectedUsers(roomId);
+                response.put("connectedUsers", connectedUsers);
+            } catch (Exception e) {
+                logger.warn("접속 사용자 목록 조회 실패: roomId={}", roomId, e);
+                response.put("connectedUsers", new java.util.ArrayList<>());
+            }
             
             // 참가자 목록 (null 체크)
             List<Map<String, Object>> participants = new java.util.ArrayList<>();
@@ -194,6 +263,7 @@ public class RaidRoomService {
             
             return response;
         } catch (Exception e) {
+            logger.error("레이드 방 조회 중 예외 발생: roomId={}, loadChannelsAndUsers={}", roomId, loadChannelsAndUsers, e);
             return null;
         }
     }
@@ -371,8 +441,9 @@ public class RaidRoomService {
     
     /**
      * 레이드 방 완료 처리
+     * 캐시 무효화 및 브로드캐스트는 트랜잭션 커밋 후 처리
      */
-    @CacheEvict(value = {"raidRoom", "todayBosses"}, allEntries = true)
+    @Transactional
     public Map<String, Object> completeRaidRoom(Long roomId) {
         Optional<RaidRoom> roomOpt = raidRoomRepository.findById(roomId);
         
@@ -394,7 +465,29 @@ public class RaidRoomService {
         room.setCompletedAt(java.time.LocalDateTime.now());
         raidRoomRepository.save(room);
         
-        // Entity Listener가 PostUpdate 이벤트로 브로드캐스트 처리
+        // 참가 기록은 WebSocket 접속 시점에 이미 생성되므로, 완료 시점에는 추가 작업 불필요
+        // (한 번이라도 접속했던 모든 사용자의 참가 기록이 이미 저장되어 있음)
+        
+        // 트랜잭션 커밋 후 캐시 무효화 및 브로드캐스트
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager
+                .registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        // 캐시 무효화
+                        evictAllCaches();
+                        // 보스 목록 브로드캐스트 (완료된 방은 목록에서 제외됨)
+                        realtimeBossService.broadcastBossListUpdate();
+                        // 레이드 방 업데이트 브로드캐스트 (완료 상태 반영)
+                        realtimeBossService.broadcastRaidRoomUpdate(roomId);
+                    }
+                });
+        } else {
+            // 트랜잭션 외부에서 호출된 경우 즉시 실행
+            evictAllCaches();
+            realtimeBossService.broadcastBossListUpdate();
+            realtimeBossService.broadcastRaidRoomUpdate(roomId);
+        }
         
         Map<String, Object> response = new HashMap<>();
         response.put("success", true);
@@ -404,8 +497,8 @@ public class RaidRoomService {
     
     /**
      * 레이드 방 삭제
+     * 캐시 무효화 및 브로드캐스트는 트랜잭션 커밋 후 처리
      */
-    @CacheEvict(value = {"raidRoom", "todayBosses"}, allEntries = true)
     @Transactional
     public Map<String, Object> deleteRaidRoom(Long roomId) {
         Optional<RaidRoom> roomOpt = raidRoomRepository.findById(roomId);
@@ -421,12 +514,48 @@ public class RaidRoomService {
         // 연관된 채널과 참가자들은 cascade로 자동 삭제됨
         raidRoomRepository.delete(room);
         
-        // Entity Listener가 PostRemove 이벤트로 브로드캐스트 처리
+        // 트랜잭션 커밋 후 캐시 무효화 및 브로드캐스트
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager
+                .registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        // 캐시 무효화
+                        evictAllCaches();
+                        // 보스 목록 브로드캐스트
+                        realtimeBossService.broadcastBossListUpdate();
+                    }
+                });
+        } else {
+            // 트랜잭션 외부에서 호출된 경우 즉시 실행
+            evictAllCaches();
+            realtimeBossService.broadcastBossListUpdate();
+        }
         
         Map<String, Object> response = new HashMap<>();
         response.put("success", true);
         response.put("message", "레이드 방이 삭제되었습니다");
         return response;
+    }
+    
+    /**
+     * 모든 관련 캐시 무효화
+     */
+    private void evictAllCaches() {
+        try {
+            if (cacheManager != null) {
+                var raidRoomCache = cacheManager.getCache("raidRoom");
+                if (raidRoomCache != null) {
+                    raidRoomCache.clear();
+                }
+                var todayBossesCache = cacheManager.getCache("todayBosses");
+                if (todayBossesCache != null) {
+                    todayBossesCache.clear();
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("캐시 무효화 실패", e);
+        }
     }
     
     /**
@@ -453,18 +582,34 @@ public class RaidRoomService {
         }
         
         // 보스 타입에 따라 해당 필드 업데이트
+        // 빈 문자열이나 null이면 색상 제거 (회색 선택 시)
+        String colorToSet = (bossColor == null || bossColor.trim().isEmpty()) ? null : bossColor;
+        
+        // 회색(gray) 색상은 null로 처리 (색상 제거)
+        if ("gray".equals(bossColor)) {
+            colorToSet = null;
+        }
+        
+        // 색상 검증 (회색은 null로 처리되므로 제외)
+        if (colorToSet != null && !colorToSet.equals("green") && !colorToSet.equals("yellow") 
+            && !colorToSet.equals("orange") && !colorToSet.equals("red")) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "지원하지 않는 색상입니다");
+            return error;
+        }
+        
         switch (bossType) {
             case "흑":
-                channel.setBossHeukColor(bossColor);
+                channel.setBossHeukColor(colorToSet);
                 break;
             case "진":
-                channel.setBossJinColor(bossColor);
+                channel.setBossJinColor(colorToSet);
                 break;
             case "묵":
-                channel.setBossMukColor(bossColor);
+                channel.setBossMukColor(colorToSet);
                 break;
             case "감":
-                channel.setBossGamColor(bossColor);
+                channel.setBossGamColor(colorToSet);
                 break;
             default:
                 Map<String, Object> error = new HashMap<>();
@@ -520,12 +665,10 @@ public class RaidRoomService {
             // 기존 선택 확인
             Optional<ChannelUser> existingOpt = channelUserRepository.findByChannelIdAndUserId(channelId, userId);
             
-            boolean isSelecting;
             if (existingOpt.isPresent()) {
                 // 이미 선택되어 있으면 해제 (다른 채널에서도 제거)
                 List<ChannelUser> userChannels = channelUserRepository.findByUserIdAndRoomId(userId, roomId);
                 channelUserRepository.deleteAll(userChannels);
-                isSelecting = false;
             } else {
                 // 다른 채널에서 제거
                 List<ChannelUser> userChannels = channelUserRepository.findByUserIdAndRoomId(userId, roomId);
@@ -537,22 +680,10 @@ public class RaidRoomService {
                 channelUser.setUser(user);
                 channelUser.setIsMoving(true);
                 channelUserRepository.save(channelUser);
-                isSelecting = true;
             }
             
-            // 최적화: 증분 업데이트만 브로드캐스트 (전체 데이터 조회 없이)
-            final boolean finalIsSelecting = isSelecting;
-            if (org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
-                org.springframework.transaction.support.TransactionSynchronizationManager
-                    .registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
-                        @Override
-                        public void afterCommit() {
-                            realtimeBossService.broadcastChannelSelectionUpdate(roomId, userId, channelId, finalIsSelecting);
-                        }
-                    });
-            } else {
-                realtimeBossService.broadcastChannelSelectionUpdate(roomId, userId, channelId, finalIsSelecting);
-            }
+            // 전체 데이터 브로드캐스트 (이동중 표시가 다른 사용자에게도 즉시 반영되도록)
+            realtimeBossService.broadcastRaidRoomUpdate(roomId);
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -561,6 +692,33 @@ public class RaidRoomService {
             // 예외 처리
             Map<String, Object> error = new HashMap<>();
             error.put("error", "채널 선택 중 오류가 발생했습니다: " + e.getMessage());
+            return error;
+        }
+    }
+    
+    /**
+     * 사용자의 이동중 상태 제거 (레이드 방 나갈 때)
+     */
+    @Transactional
+    public Map<String, Object> clearUserMovingStatus(Long roomId, Long userId) {
+        try {
+            // 해당 레이드 방의 모든 채널에서 사용자의 이동중 상태 제거
+            List<ChannelUser> userChannels = channelUserRepository.findByUserIdAndRoomId(userId, roomId);
+            if (!userChannels.isEmpty()) {
+                channelUserRepository.deleteAll(userChannels);
+                logger.info("사용자 이동중 상태 제거: userId={}, roomId={}, removedCount={}", userId, roomId, userChannels.size());
+                
+                // 실시간 브로드캐스트
+                realtimeBossService.broadcastRaidRoomUpdate(roomId);
+            }
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            return response;
+        } catch (Exception e) {
+            logger.error("사용자 이동중 상태 제거 중 오류: userId={}, roomId={}", userId, roomId, e);
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "이동중 상태 제거 중 오류가 발생했습니다: " + e.getMessage());
             return error;
         }
     }
@@ -595,6 +753,72 @@ public class RaidRoomService {
             Map<String, Object> response = new HashMap<>();
             response.put("rooms", new java.util.ArrayList<>());
             return response;
+        }
+    }
+    
+    /**
+     * 레이드 참석/참석 취소 토글
+     */
+    @Transactional
+    public Map<String, Object> toggleParticipation(Long roomId, Long userId) {
+        try {
+            // 레이드 방 확인
+            Optional<RaidRoom> roomOpt = raidRoomRepository.findById(roomId);
+            if (roomOpt.isEmpty()) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("error", "레이드 방을 찾을 수 없습니다");
+                return error;
+            }
+            
+            RaidRoom room = roomOpt.get();
+            
+            // 완료된 레이드는 참석 불가
+            if (room.getIsCompleted() != null && room.getIsCompleted()) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("error", "완료된 레이드는 참석할 수 없습니다");
+                return error;
+            }
+            
+            // 사용자 확인
+            Optional<User> userOpt = userRepository.findById(userId);
+            if (userOpt.isEmpty()) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("error", "사용자를 찾을 수 없습니다");
+                return error;
+            }
+            
+            // 기존 참가 기록 확인
+            Optional<RaidParticipation> existingParticipation = 
+                raidParticipationRepository.findByUserIdAndRaidRoomId(userId, roomId);
+            
+            boolean isParticipating;
+            if (existingParticipation.isPresent()) {
+                // 참석 취소
+                raidParticipationRepository.delete(existingParticipation.get());
+                isParticipating = false;
+                logger.info("레이드 참석 취소: userId={}, roomId={}", userId, roomId);
+            } else {
+                // 참석 등록
+                RaidParticipation participation = new RaidParticipation();
+                participation.setUser(userOpt.get());
+                participation.setRaidRoom(room);
+                raidParticipationRepository.save(participation);
+                isParticipating = true;
+                logger.info("레이드 참석 등록: userId={}, roomId={}", userId, roomId);
+            }
+            
+            // 실시간 브로드캐스트 (참석 명단 업데이트)
+            realtimeBossService.broadcastRaidRoomUpdate(roomId);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("isParticipating", isParticipating);
+            return response;
+        } catch (Exception e) {
+            logger.error("레이드 참석 토글 중 오류: userId={}, roomId={}", userId, roomId, e);
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "참석 처리 중 오류가 발생했습니다: " + e.getMessage());
+            return error;
         }
     }
 }

@@ -6,7 +6,7 @@ import com.example.entity.RaidRoom;
 import com.example.repository.BossRepository;
 import com.example.repository.RaidRoomRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +30,12 @@ public class BossService {
     
     @Autowired
     private RaidRoomService raidRoomService;
+    
+    @Autowired
+    private RealtimeBossService realtimeBossService;
+    
+    @Autowired
+    private CacheManager cacheManager;
     
     /**
      * 오늘 이후의 모든 보스 레이드 목록 조회
@@ -119,10 +125,9 @@ public class BossService {
     
     /**
      * 보스 레이드 방 생성
-     * 방 생성 시 캐시 무효화 (Entity Listener가 브로드캐스트 처리)
+     * 캐시 무효화 및 브로드캐스트는 트랜잭션 커밋 후 처리
      */
     @Transactional
-    @CacheEvict(value = "todayBosses", allEntries = true)
     public Map<String, Object> createRaidRoom(String bossTypeStr, LocalDate raidDate, LocalTime raidTime) {
         try {
             // BossType enum 변환
@@ -194,8 +199,23 @@ public class BossService {
                 
                 room = raidRoomRepository.save(room);
                 
-                // Entity Listener가 PostPersist 이벤트로 브로드캐스트 처리
-                // 별도 호출 불필요
+                // 트랜잭션 커밋 후 캐시 무효화 및 브로드캐스트
+                if (org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
+                    org.springframework.transaction.support.TransactionSynchronizationManager
+                        .registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
+                            @Override
+                            public void afterCommit() {
+                                // 캐시 무효화
+                                evictTodayBossesCache();
+                                // 보스 목록 브로드캐스트
+                                realtimeBossService.broadcastBossListUpdate();
+                            }
+                        });
+                } else {
+                    // 트랜잭션 외부에서 호출된 경우 즉시 실행
+                    evictTodayBossesCache();
+                    realtimeBossService.broadcastBossListUpdate();
+                }
                 
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", true);
@@ -217,6 +237,22 @@ public class BossService {
             Map<String, Object> error = new HashMap<>();
             error.put("error", "방 생성 중 예상치 못한 오류가 발생했습니다: " + e.getMessage());
             return error;
+        }
+    }
+    
+    /**
+     * todayBosses 캐시 무효화
+     */
+    private void evictTodayBossesCache() {
+        try {
+            if (cacheManager != null) {
+                var todayBossesCache = cacheManager.getCache("todayBosses");
+                if (todayBossesCache != null) {
+                    todayBossesCache.clear();
+                }
+            }
+        } catch (Exception e) {
+            // 캐시 무효화 실패는 무시
         }
     }
     

@@ -89,11 +89,8 @@ const BossListPage: React.FC<BossListPageProps> = ({ user, onLogout }) => {
         setShowCreateModal(false);
         setError('');
         // 방 생성 성공 시 목록 강제 새로고침 (캐시 무효화)
+        // WebSocket을 통해 자동으로 목록이 업데이트됨
         await loadBosses(true);
-        // 약간의 지연 후 생성된 방으로 이동 (목록 업데이트를 위해)
-        setTimeout(() => {
-          navigate(`/raid-room/${data.roomId}`);
-        }, 100);
       } else {
         const errorMsg = data.error || data.message || '방 생성에 실패했습니다.';
         setError(errorMsg);
@@ -127,42 +124,46 @@ const BossListPage: React.FC<BossListPageProps> = ({ user, onLogout }) => {
 
   return (
     <div className="boss-list-container">
-            <div className="header">
-              <h1>🐉 보스 레이드</h1>
-              <div className="user-info">
-                <button
-                  className="btn-completed"
-                  onClick={() => navigate('/completed')}
-                >
-                  ✓ 완료된 레이드
-                </button>
-                <span>{user.displayName || user.username}</span>
-                <button className="btn-logout" onClick={onLogout}>
-                  로그아웃
-                </button>
-              </div>
-            </div>
-      <div className="content">
-        <div className="content-header">
-          <h2>예정된 보스 레이드</h2>
+      <div className="header">
+        <div className="header-actions">
           <button
-            className="btn-create-room"
-            onClick={() => setShowCreateModal(true)}
+            className="btn-completed"
+            onClick={() => navigate('/completed')}
           >
-            + 새 레이드 방 생성
+            완료된 레이드
+          </button>
+          <span className="user-name">{user.displayName || user.username}</span>
+          <button className="btn-logout" onClick={onLogout}>
+            로그아웃
           </button>
         </div>
-        {loading ? (
-          <p>로딩 중...</p>
-        ) : error ? (
-          <p style={{ color: 'red' }}>{error}</p>
-        ) : bosses.length === 0 ? (
-          <div className="no-bosses">
-            <p>오늘의 보스 레이드 방이 없습니다.</p>
-            <p>위의 "새 레이드 방 생성" 버튼을 눌러 방을 생성해주세요.</p>
+      </div>
+      <div className="content">
+        <div className="channels-section">
+          <div className="channels-header">
+            <div className="channels-header-left">
+              <h2>레이드 방 목록</h2>
+            </div>
+            <div className="channels-header-actions">
+              <button
+                className="btn-add"
+                onClick={() => setShowCreateModal(true)}
+              >
+                + 새 레이드 방 생성
+              </button>
+            </div>
           </div>
-        ) : (
-          <div className="boss-list">
+          {loading ? (
+            <p>로딩 중...</p>
+          ) : error ? (
+            <p style={{ color: 'red' }}>{error}</p>
+          ) : bosses.length === 0 ? (
+            <div className="no-bosses">
+              <p>오늘의 보스 레이드 방이 없습니다.</p>
+              <p>위의 "새 레이드 방 생성" 버튼을 눌러 방을 생성해주세요.</p>
+            </div>
+          ) : (
+            <div className="boss-list">
               {bosses.map((boss) => (
                 <div key={boss.id} className="boss-card">
                   <h3>{boss.name}</h3>
@@ -203,13 +204,15 @@ const BossListPage: React.FC<BossListPageProps> = ({ user, onLogout }) => {
                     <p className="no-rooms">방이 없습니다. 위의 "방 생성" 버튼을 눌러주세요.</p>
                   )}
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+               </div>
+             ))}
+            </div>
+          )}
+        </div>
+      </div>
 
-        {/* 방 생성 모달 */}
-        {showCreateModal && (
+      {/* 방 생성 모달 */}
+      {showCreateModal && (
           <div className="modal-overlay" onClick={() => {
             setShowCreateModal(false);
             setError('');
@@ -279,7 +282,6 @@ const BossListPage: React.FC<BossListPageProps> = ({ user, onLogout }) => {
             </div>
           </div>
         )}
-      </div>
     </div>
   );
 };

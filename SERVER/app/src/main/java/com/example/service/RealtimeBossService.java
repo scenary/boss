@@ -1,14 +1,18 @@
 package com.example.service;
 
 import com.example.config.ApplicationContextProvider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.CacheManager;
 import org.springframework.context.ApplicationContext;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * 실시간 보스 레이드 상태 동기화 서비스
@@ -26,6 +30,8 @@ import java.util.Map;
  */
 @Service
 public class RealtimeBossService {
+    
+    private static final Logger logger = LoggerFactory.getLogger(RealtimeBossService.class);
     
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
@@ -76,33 +82,96 @@ public class RealtimeBossService {
      * 특정 레이드 방의 변경사항을 즉시 브로드캐스트
      * (채널 추가, 잡혔다 표시 등)
      * 
-     * 최적화: 트랜잭션 커밋 후 브로드캐스트하여 데이터 일관성 보장
-     * 동시 업데이트 시 중복 브로드캐스트 방지를 위한 디바운싱 고려 필요
+     * 성능 개선: 증분 업데이트 + 백그라운드 전체 업데이트
+     * 1. 즉시 증분 업데이트 브로드캐스트 (빠른 반응)
+     * 2. 백그라운드에서 전체 데이터 조회 및 브로드캐스트 (데이터 일관성 보장)
      */
     public void broadcastRaidRoomUpdate(Long roomId) {
         try {
             // 트랜잭션이 커밋된 후에만 브로드캐스트하도록
-            // 비동기로 처리하여 트랜잭션 완료 후 실행
             if (org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
                 org.springframework.transaction.support.TransactionSynchronizationManager
                     .registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
                         @Override
                         public void afterCommit() {
-                            // 트랜잭션 커밋 후 캐시 무효화 (최신 데이터 보장)
+                            // 트랜잭션 커밋 후 캐시 무효화
                             evictRaidRoomCache(roomId);
-                            executeBroadcast(roomId, "트랜잭션 커밋 후");
+                            // 즉시 증분 업데이트 브로드캐스트 (빠른 반응)
+                            broadcastIncrementalUpdate(roomId);
+                            // 백그라운드에서 전체 데이터 조회 및 브로드캐스트 (데이터 일관성 보장)
+                            executeBroadcastAsync(roomId, "트랜잭션 커밋 후");
                         }
                     });
             } else {
-                // 트랜잭션 외부에서 호출된 경우 즉시 캐시 무효화 및 실행
+                // 트랜잭션 외부에서 호출된 경우 즉시 실행
                 evictRaidRoomCache(roomId);
-                executeBroadcast(roomId, "트랜잭션 외부");
+                broadcastIncrementalUpdate(roomId);
+                executeBroadcastAsync(roomId, "트랜잭션 외부");
             }
         } catch (Exception e) {
-            // 예외 발생 시에도 캐시 무효화 및 브로드캐스트 시도
+            // 예외 발생 시에도 브로드캐스트 시도
             evictRaidRoomCache(roomId);
-            executeBroadcast(roomId, "예외 처리 중");
+            broadcastIncrementalUpdate(roomId);
+            executeBroadcastAsync(roomId, "예외 처리 중");
         }
+    }
+    
+    /**
+     * 증분 업데이트 브로드캐스트 (즉시 실행, 빠른 반응)
+     * 클라이언트가 즉시 UI를 업데이트할 수 있도록 변경 사항만 전송
+     * 전체 데이터는 백그라운드에서 조회하여 보완
+     */
+    private void broadcastIncrementalUpdate(Long roomId) {
+        try {
+            // 캐시에서 최신 데이터를 빠르게 조회 (전체 조회보다 빠름)
+            Map<String, Object> cachedData = null;
+            try {
+                var cache = cacheManager != null ? cacheManager.getCache("raidRoom") : null;
+                if (cache != null) {
+                    var cacheValue = cache.get(roomId);
+                    if (cacheValue != null) {
+                        Object value = cacheValue.get();
+                        if (value instanceof Map<?, ?>) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> temp = (Map<String, Object>) value;
+                            cachedData = temp;
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                // 캐시 조회 실패는 무시
+            }
+            
+            Map<String, Object> update = new HashMap<>();
+            update.put("type", "incremental_update");
+            update.put("roomId", roomId);
+            update.put("_timestamp", System.currentTimeMillis());
+            
+            // 캐시된 데이터가 있으면 포함 (빠른 반응)
+            if (cachedData != null) {
+                update.put("channels", cachedData.get("channels"));
+                update.put("participants", cachedData.get("participants"));
+                update.put("connectedUsers", cachedData.get("connectedUsers"));
+                logger.debug("증분 업데이트 브로드캐스트 (캐시 사용): roomId={}", roomId);
+            } else {
+                update.put("message", "업데이트가 발생했습니다. 전체 데이터를 기다리는 중...");
+                logger.debug("증분 업데이트 브로드캐스트 (캐시 없음): roomId={}", roomId);
+            }
+            
+            messagingTemplate.convertAndSend("/topic/raid-room/" + roomId, update);
+        } catch (Exception e) {
+            logger.warn("증분 업데이트 브로드캐스트 실패: roomId={}", roomId, e);
+        }
+    }
+    
+    /**
+     * 비동기로 전체 데이터 브로드캐스트 (백그라운드 실행)
+     * 데이터 일관성을 보장하기 위해 전체 데이터를 조회하여 전송
+     */
+    @Async
+    public CompletableFuture<Void> executeBroadcastAsync(Long roomId, String context) {
+        executeBroadcast(roomId, context);
+        return CompletableFuture.completedFuture(null);
     }
     
     /**
@@ -151,9 +220,14 @@ public class RealtimeBossService {
                 // 타임스탬프 추가하여 메시지 순서 보장
                 roomData.put("_timestamp", System.currentTimeMillis());
                 messagingTemplate.convertAndSend("/topic/raid-room/" + roomId, roomData);
+                int channelCount = roomData.get("channels") != null ? ((java.util.List<?>) roomData.get("channels")).size() : 0;
+                logger.info("WebSocket 브로드캐스트 성공: roomId={}, context={}, channels={}", roomId, context, channelCount);
+            } else {
+                logger.error("WebSocket 브로드캐스트 실패: roomData가 null입니다. roomId={}, context={}", roomId, context);
             }
         } catch (Exception e) {
-            // 브로드캐스트 실패 시 무시
+            // 브로드캐스트 실패 시 로깅
+            logger.error("WebSocket 브로드캐스트 예외 발생: roomId={}, context={}", roomId, context, e);
         }
     }
     

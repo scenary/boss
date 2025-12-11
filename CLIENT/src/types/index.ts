@@ -66,6 +66,7 @@ export interface RaidRoomData {
   isCompleted?: boolean;
   channels: Channel[];
   participants?: Participant[];
+  connectedUsers?: Participant[]; // 현재 접속한 사용자 목록
 }
 
 export interface ApiResponse<T = any> {

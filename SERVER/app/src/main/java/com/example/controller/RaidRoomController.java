@@ -178,5 +178,37 @@ public class RaidRoomController {
             return ResponseUtil.internalError("레이드 방 삭제 중 오류가 발생했습니다: " + e.getMessage());
         }
     }
+    
+    // 레이드 참석/참석 취소 토글
+    @PutMapping("/{roomId}/participate")
+    public ResponseEntity<Map<String, Object>> toggleParticipation(
+            @PathVariable Long roomId,
+            @RequestBody Map<String, Object> request) {
+        Long userId = null;
+        Object userIdObj = request.get("userId");
+        
+        if (userIdObj != null) {
+            if (userIdObj instanceof Integer) {
+                userId = ((Integer) userIdObj).longValue();
+            } else if (userIdObj instanceof Long) {
+                userId = (Long) userIdObj;
+            } else if (userIdObj instanceof Number) {
+                userId = ((Number) userIdObj).longValue();
+            } else if (userIdObj instanceof String) {
+                try {
+                    userId = Long.parseLong((String) userIdObj);
+                } catch (NumberFormatException e) {
+                    // 파싱 실패
+                }
+            }
+        }
+        
+        if (userId == null) {
+            return ResponseUtil.badRequest("사용자 ID가 필요합니다");
+        }
+        
+        Map<String, Object> response = raidRoomService.toggleParticipation(roomId, userId);
+        return ResponseUtil.fromServiceResponse(response);
+    }
 }
 

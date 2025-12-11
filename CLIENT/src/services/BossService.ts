@@ -163,3 +163,14 @@ export const updateChannelBossColor = async (roomId: number, channelId: number, 
   
   return response.data;
 };
+
+export const toggleParticipation = async (roomId: number, userId: number): Promise<ApiResponse & { isParticipating?: boolean }> => {
+  const response = await apiClient.put(`/api/raid-rooms/${roomId}/participate`, {
+    userId
+  });
+  
+  // 참석 상태 변경 시 해당 방 캐시 무효화
+  cache.delete(getRaidRoomCacheKey(roomId));
+  
+  return response.data;
+};
