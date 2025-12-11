@@ -18,6 +18,12 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      '/ws': {
+        target: process.env.BACKEND_URL || 'http://localhost:8080',
+        ws: true, // WebSocket 프록시 활성화
+        changeOrigin: true,
+        secure: false,
+      },
     },
   },
   // 개발 모드에서도 sourcemap 활성화

@@ -40,7 +40,11 @@ tasks.named('test') {
 }
 
 // bootRun 태스크에서 .env 파일의 환경 변수 읽기 (특수문자 포함 비밀번호 처리)
+// 로컬 개발 시 기본적으로 dev 프로필 사용
 tasks.named('bootRun') {
+    // 기본 프로필을 dev로 설정 (프로필이 명시되지 않은 경우)
+    args = ['--spring.profiles.active=dev']
+    
     doFirst {
         def envFile = file("${project.rootDir}/../../.env")
         if (envFile.exists()) {

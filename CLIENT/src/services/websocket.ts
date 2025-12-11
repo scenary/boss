@@ -26,12 +26,17 @@ class WebSocketService {
     }
 
     this.isConnecting = true;
-    const backendUrl = getBackendUrl();
     
-    // SockJS URL 생성 (프로토콜 제거 후 /ws 추가)
-    // http://localhost:8080 -> http://localhost:8080/ws
-    // https://boss-ymz0.onrender.com -> https://boss-ymz0.onrender.com/ws
-    const wsUrl = `${backendUrl}/ws`;
+    // 개발 환경에서는 Vite 프록시를 통해 연결, 프로덕션에서는 직접 연결
+    let wsUrl: string;
+    if (import.meta.env.DEV) {
+      // 개발 환경: Vite 프록시 사용 (상대 경로)
+      wsUrl = '/ws';
+    } else {
+      // 프로덕션: 백엔드 URL 직접 사용
+      const backendUrl = getBackendUrl();
+      wsUrl = `${backendUrl}/ws`;
+    }
     
     try {
       this.client = new Client({

@@ -43,6 +43,6 @@ RUN java -version
 
 EXPOSE 8080
 
-# JDK 21로 Spring Boot 애플리케이션 실행
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# JDK 21로 Spring Boot 애플리케이션 실행 (프로덕션 프로필 사용)
+ENTRYPOINT ["java", "-Dspring.profiles.active=prod", "-jar", "app.jar"]
 
