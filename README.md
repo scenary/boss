@@ -23,6 +23,13 @@ boss/
 │   ├── gradlew
 │   └── settings.gradle
 ├── docker-compose.yml   # Docker Compose 설정
+├── docs/                # 프로젝트 문서
+│   ├── README.md
+│   ├── SETUP_GUIDE.md
+│   ├── ARCHITECTURE.md
+│   ├── VERSIONING.md
+│   ├── CHANGELOG.md
+│   └── ...
 └── README.md
 ```
 
@@ -202,8 +209,18 @@ mysql -h 127.0.0.1 -u root -proot boss_db
    // app/src/main/java/com/example/controller/
    ```
 
+## 📚 추가 문서
+
+상세한 문서는 [`docs/`](docs/) 폴더를 참조하세요:
+
+- [설정 가이드](docs/SETUP_GUIDE.md) - 개발 환경 설정
+- [아키텍처](docs/ARCHITECTURE.md) - 시스템 설계
+- [버전 관리](docs/VERSIONING.md) - 배포 워크플로우
+- [변경사항](docs/CHANGELOG.md) - 릴리즈 히스토리
+- [배포 가이드](docs/CLIENT_DEPLOYMENT.md) - 클라이언트 배포
+
 ---
 
-**작성일**: 2025년 12월 9일
+**작성일**: 2025년 12월 9일  
 **스택**: TypeScript, Spring Boot, MySQL, Docker
 
