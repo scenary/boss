@@ -80,6 +80,11 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           script: |
-            sudo chown -R www-data:www-data ${{ secrets.DEPLOY_CLIENT_PATH || '/var/www/boss' }}
-            sudo chmod -R 755 ${{ secrets.DEPLOY_CLIENT_PATH || '/var/www/boss' }}
+            DEPLOY_PATH="${{ secrets.DEPLOY_CLIENT_PATH || '/var/www/boss' }}"
+            if [ -d "$DEPLOY_PATH" ]; then
+              sudo chown -R www-data:www-data "$DEPLOY_PATH" || chown -R www-data:www-data "$DEPLOY_PATH" || true
+              sudo chmod -R 755 "$DEPLOY_PATH" || chmod -R 755 "$DEPLOY_PATH" || true
+            else
+              echo "Warning: Deploy path $DEPLOY_PATH does not exist"
+            fi
 
