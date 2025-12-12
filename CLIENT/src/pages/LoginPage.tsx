@@ -5,31 +5,17 @@ import { User } from '../types';
 
 interface LoginPageProps {
   onLogin: (user: User) => void;
-  isServerAlive?: boolean | null; // App.tsx에서 전달받은 서버 상태
 }
 
-const LoginPage: React.FC<LoginPageProps> = ({ onLogin, isServerAlive: propIsServerAlive }) => {
+const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [nickname, setNickname] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [isServerAlive, setIsServerAlive] = useState<boolean | null>(null); // null: 초기 상태, true: 살아있음, false: sleep
   const navigate = useNavigate();
 
-  // prop으로 받은 서버 상태가 결정된 값(true/false)이면 사용
+  // 초기 서버 상태 체크 및 자동 깨우기
   useEffect(() => {
-    // null이나 undefined가 아닌 실제 결정된 값일 때만 사용
-    if (propIsServerAlive === true || propIsServerAlive === false) {
-      setIsServerAlive(propIsServerAlive);
-    }
-  }, [propIsServerAlive]);
-
-  // 초기 서버 상태 체크 및 자동 깨우기 (prop이 결정되지 않았을 때만)
-  useEffect(() => {
-    // prop으로 서버 상태가 실제로 결정된 값(true/false)이면 자체 체크 스킵
-    // null이나 undefined일 때는 자체 체크 수행
-    if (propIsServerAlive === true || propIsServerAlive === false) {
-      return;
-    }
     const checkAndWakeUp = async () => {
       // 최초 한 번 체크
       const isAlive = await healthCheck();
