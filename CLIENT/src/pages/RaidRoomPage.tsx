@@ -641,10 +641,16 @@ const RaidRoomPage: React.FC<RaidRoomPageProps> = ({ user }) => {
     }
   };
 
+  const memoTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
   const handleMemoClick = (channel: Channel) => {
     if (roomData?.isCompleted) return;
     const memoValue = channel.memo && channel.memo.trim() !== '' ? channel.memo : '';
     setEditingMemo({ channelId: channel.id, memo: memoValue });
+    // 다음 렌더링 사이클에서 textarea에 포커스
+    setTimeout(() => {
+      memoTextareaRef.current?.focus();
+    }, 0);
   };
 
   const handleMemoSave = async (channelId: number) => {
@@ -1092,8 +1098,16 @@ const RaidRoomPage: React.FC<RaidRoomPageProps> = ({ user }) => {
                   {editingMemo?.channelId === channel.id ? (
                     <div className="channel-memo-edit">
                       <textarea
+                        ref={memoTextareaRef}
                         value={editingMemo.memo}
                         onChange={(e) => setEditingMemo({ ...editingMemo, memo: e.target.value })}
+                        onKeyDown={(e) => {
+                          // Enter: 저장, Shift+Enter: 줄바꿈
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleMemoSave(channel.id);
+                          }
+                        }}
                         placeholder="메모를 입력하세요..."
                         className="memo-textarea"
                         rows={3}
