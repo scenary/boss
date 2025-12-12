@@ -1,18 +1,27 @@
-import React, { useState, FormEvent } from 'react';
+import React, { useState, FormEvent, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { guestLogin, discordLogin } from '../services/AuthService';
+import { guestLogin, discordLogin, healthCheck } from '../services/AuthService';
 import { User } from '../types';
 
 interface LoginPageProps {
   onLogin: (user: User) => void;
-  isServerAlive?: boolean | null; // null: 초기 상태, true: 살아있음, false: sleep
 }
 
-const LoginPage: React.FC<LoginPageProps> = ({ onLogin, isServerAlive = null }) => {
+const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [nickname, setNickname] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isServerAlive, setIsServerAlive] = useState<boolean | null>(null); // null: 초기 상태, true: 살아있음, false: sleep
   const navigate = useNavigate();
+
+  // 페이지 마운트 시 서버 상태 확인
+  useEffect(() => {
+    const checkServerStatus = async () => {
+      const isAlive = await healthCheck();
+      setIsServerAlive(isAlive);
+    };
+    checkServerStatus();
+  }, []);
 
   // URL 파라미터에서 에러 확인
   React.useEffect(() => {

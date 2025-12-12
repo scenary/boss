@@ -1,6 +1,8 @@
 package com.example.controller;
 
 import com.example.service.AuthService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,12 +17,15 @@ import java.util.Map;
 @CrossOrigin(origins = "*")
 public class AuthController {
     
+    private static final Logger logger = LoggerFactory.getLogger(AuthController.class);
+    
     @Autowired
     private AuthService authService;
     
     // 헬스 체크
     @GetMapping("/health")
     public ResponseEntity<Map<String, Object>> health() {
+        logger.info("Health check request received");
         Map<String, Object> response = new HashMap<>();
         response.put("status", "ok");
         response.put("message", "서버가 정상적으로 실행 중입니다");
